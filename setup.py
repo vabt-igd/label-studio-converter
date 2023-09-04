@@ -32,6 +32,7 @@ setuptools.setup(
     extras_require={
         "coco": [
             "pycocotools==2.0.6",
+            'scikit-image==0.21.0 ',
         ],
     },
     python_requires='>=3.6',
