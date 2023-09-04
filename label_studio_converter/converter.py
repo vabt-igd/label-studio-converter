@@ -1,5 +1,6 @@
 import os
 import io
+import itertools
 import math
 import logging
 import ujson as json
@@ -29,7 +30,9 @@ from label_studio_converter.utils import (
     get_polygon_bounding_box,
     get_annotator,
     get_json_root_type,
-    prettify_result,
+    prettify_result,    
+    get_cocomask_area,
+    get_cocomask_bounding_box,
 )
 from label_studio_converter import brush
 from label_studio_converter.audio import convert_to_asr_json_manifest
@@ -314,8 +317,23 @@ class Converter(object):
             or 'PolygonLabels' in output_tag_types
             and 'Labels' in output_tag_types
         ):
-            all_formats.remove(Format.COCO.name)
             all_formats.remove(Format.YOLO.name)
+        if not (
+            'Image' in input_tag_types
+            and (
+                'RectangleLabels' in output_tag_types
+                or 'PolygonLabels' in output_tag_types
+                or ('BrushLabels' in output_tag_types and brush.pycocotools_imported)
+                or ('brushlabels' in output_tag_types and brush.pycocotools_imported)
+            )
+            or 'Rectangle' in output_tag_types
+            and 'Labels' in output_tag_types
+            or 'PolygonLabels' in output_tag_types
+            and 'Labels' in output_tag_types
+            or ('Brush' in output_tag_types and brush.pycocotools_imported)
+            and 'Labels' in output_tag_types
+        ):
+            all_formats.remove(Format.COCO.name)
         if not (
             'Image' in input_tag_types
             and (
@@ -510,9 +528,7 @@ class Converter(object):
                     fout.write('{token} -X- _ {tag}\n'.format(token=token, tag=tag))
                 fout.write('\n')
 
-    def convert_to_coco(
-        self, input_data, output_dir, output_image_dir=None, is_dir=True
-    ):
+    def convert_to_coco(self, input_data, output_dir, output_image_dir=None, is_dir=True):
         def add_image(images, width, height, image_id, image_path):
             images.append(
                 {
@@ -596,7 +612,13 @@ class Converter(object):
 
             for label in labels:
                 category_name = None
-                for key in ['rectanglelabels', 'polygonlabels', 'labels']:
+                for key in [
+                    'rectanglelabels',
+                    'polygonlabels',
+                    'brushlabels',
+                    'keypointlabels',
+                    'labels',
+                ]:
                     if key in label and len(label[key]) > 0:
                         category_name = label[key][0]
                         break
@@ -615,15 +637,52 @@ class Converter(object):
                     width, height = label['original_width'], label['original_height']
                     images = add_image(images, width, height, image_id, image_path)
 
-                if category_name not in category_name_to_id:
-                    category_id = len(categories)
-                    category_name_to_id[category_name] = category_id
-                    categories.append({'id': category_id, 'name': category_name})
                 category_id = category_name_to_id[category_name]
 
                 annotation_id = len(annotations)
 
-                if 'rectanglelabels' in label or 'labels' in label:
+                if "polygonlabels" in label:
+                    if "points" not in label:
+                        logger.warn(label)
+                    points_abs = [
+                        (x / 100 * width, y / 100 * height) for x, y in label["points"]
+                    ]
+                    x, y = zip(*points_abs)
+
+                    annotations.append(
+                        {
+                            'id': annotation_id,
+                            'image_id': image_id,
+                            'category_id': category_id,
+                            'segmentation': [
+                                [coord for point in points_abs for coord in point]
+                            ],
+                            'bbox': get_polygon_bounding_box(x, y),
+                            'ignore': 0,
+                            'iscrowd': 0,
+                            'area': get_polygon_area(x, y),
+                        }
+                    )
+                elif 'brushlabels' in label and brush.pycocotools_imported:
+                    if "rle" not in label:
+                        logger.warn(label)
+                    coco_rle = brush.ls_rle_to_coco_rle(label["rle"], height, width)
+                    segmentation = brush.ls_rle_to_polygon(label["rle"], height, width)
+                    bbox = brush.get_cocomask_bounding_box(coco_rle)
+                    area = brush.get_cocomask_area(coco_rle)
+                    annotations.append(
+                        {
+                            "id": annotation_id,
+                            "image_id": image_id,
+                            "category_id": category_id,
+                            "segmentation": segmentation,
+                            "bbox": bbox,
+                            'ignore': 0,
+                            "iscrowd": 0,
+                            "area": area,
+                        }
+                    )
+                elif 'rectanglelabels' in label or 'labels' in label:
                     xywh = self.rotated_rectangle(label)
                     if xywh is None:
                         continue
@@ -646,24 +705,24 @@ class Converter(object):
                             'area': w * h,
                         }
                     )
-                elif "polygonlabels" in label:
-                    points_abs = [
-                        (x / 100 * width, y / 100 * height) for x, y in label["points"]
-                    ]
-                    x, y = zip(*points_abs)
-
+                elif 'keypointlabels' in label:
+                    if "rle" not in label:
+                        logger.warn(label)
+                    print(label["rle"])
+                    coco_rle = brush.ls_rle_to_coco_rle(label["rle"], height, width)
+                    segmentation = brush.ls_rle_to_polygon(label["rle"], height, width)
+                    bbox = brush.get_cocomask_bounding_box(coco_rle)
+                    area = brush.get_cocomask_area(coco_rle)
                     annotations.append(
                         {
                             'id': annotation_id,
                             'image_id': image_id,
                             'category_id': category_id,
-                            'segmentation': [
-                                [coord for point in points_abs for coord in point]
-                            ],
-                            'bbox': get_polygon_bounding_box(x, y),
+                            'segmentation': segmentation,
+                            'bbox': bbox,
                             'ignore': 0,
                             'iscrowd': 0,
-                            'area': get_polygon_area(x, y),
+                            'area': area,
                         }
                     )
                 else:
@@ -799,7 +858,12 @@ class Converter(object):
             for label in labels:
                 category_name = None
                 category_names = []  # considering multi-label
-                for key in ['rectanglelabels', 'polygonlabels', 'labels']:
+                for key in [
+                    'rectanglelabels',
+                    'polygonlabels',
+                    'brushlabels',
+                    'labels',
+                ]:
                     if key in label and len(label[key]) > 0:
                         # change to save multi-label
                         for category_name in label[key]:
