@@ -686,23 +686,33 @@ class Converter(object):
                     xywh = self.rotated_rectangle(label)
                     if xywh is None:
                         continue
-
-                    x, y, w, h = xywh
-                    x = x * label["original_width"] / 100
-                    y = y * label["original_height"] / 100
-                    w = w * label["original_width"] / 100
-                    h = h * label["original_height"] / 100
+                        
+                    if "rle" in label and brush.pycocotools_imported:
+                        coco_rle = brush.ls_rle_to_coco_rle(label["rle"], height, width)
+                        segmentation = brush.ls_rle_to_polygon(label["rle"], height, width)
+                        bbox = brush.get_cocomask_bounding_box(coco_rle)
+                        area = brush.get_cocomask_area(coco_rle)
+                        
+                    else:
+                        segmentation = []
+                        x, y, w, h = xywh
+                        x = x * label["original_width"] / 100
+                        y = y * label["original_height"] / 100
+                        w = w * label["original_width"] / 100
+                        h = h * label["original_height"] / 100
+                        bbox = [x, y, w, h]
+                        area = w * h
 
                     annotations.append(
                         {
                             'id': annotation_id,
                             'image_id': image_id,
                             'category_id': category_id,
-                            'segmentation': [],
-                            'bbox': [x, y, w, h],
+                            'segmentation': segmentation,
+                            'bbox': bbox,
                             'ignore': 0,
                             'iscrowd': 0,
-                            'area': w * h,
+                            'area': area,
                         }
                     )
                 elif 'keypointlabels' in label:
