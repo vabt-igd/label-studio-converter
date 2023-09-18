@@ -938,8 +938,8 @@ class Converter(object):
                         bbox = brush.get_cocomask_bounding_box(coco_rle)
                         annotations.append(
                             [
-                                annotation_id,
-                                bbox,
+                                [category_id]
+                                + bbox,
                             ]
                         )
                     else:
