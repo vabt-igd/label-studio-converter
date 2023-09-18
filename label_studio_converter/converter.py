@@ -917,8 +917,33 @@ class Converter(object):
                             [category_id]
                             + [coord for point in points_abs for coord in point]
                         )
+                    elif 'brushlabels' in label and brush.pycocotools_imported:
+                        if "rle" not in label:
+                            logger.warn(f"Encountered a brushlabel without a RLE: {label}")
+                            continue                            
+                        
+                        width = None
+                        height = None
+                        try:
+                            with Image.open(os.path.join(output_dir, image_path)) as img:
+                                width, height = img.size
+                        except:
+                            logger.warn(
+                                f"Unable to open {image_path}, can't extract width and height for YOLO export...",
+                                exc_info=True,
+                            )
+                            continue
+                            
+                        coco_rle = brush.ls_rle_to_coco_rle(label["rle"], height, width)
+                        bbox = brush.get_cocomask_bounding_box(coco_rle)
+                        annotations.append(
+                            [
+                                annotation_id,
+                                bbox,
+                            ]
+                        )
                     else:
-                        raise ValueError(f"Unknown label type {label}")
+                        logger.warn(f"Incompatible label type for YOLO: {label}")
             with open(label_path, 'w') as f:
                 for annotation in annotations:
                     for idx, l in enumerate(annotation):
