@@ -663,9 +663,10 @@ class Converter(object):
                             'area': get_polygon_area(x, y),
                         }
                     )
-                elif 'brushlabels' in label and brush.pycocotools_imported:
+                elif ('brushlabels' in label or (label["type"] == "MagicWand" and category_id is not None)) and brush.pycocotools_imported:
                     if "rle" not in label:
                         logger.warn(label)
+                        continue
                     coco_rle = brush.ls_rle_to_coco_rle(label["rle"], height, width)
                     segmentation = brush.ls_rle_to_polygon(label["rle"], height, width)
                     bbox = brush.get_cocomask_bounding_box(coco_rle)
@@ -718,7 +719,8 @@ class Converter(object):
                 elif 'keypointlabels' in label:
                     if "rle" not in label:
                         logger.warn(label)
-                    print(label["rle"])
+                        continue
+                        
                     coco_rle = brush.ls_rle_to_coco_rle(label["rle"], height, width)
                     segmentation = brush.ls_rle_to_polygon(label["rle"], height, width)
                     bbox = brush.get_cocomask_bounding_box(coco_rle)
@@ -917,7 +919,7 @@ class Converter(object):
                             [category_id]
                             + [coord for point in points_abs for coord in point]
                         )
-                    elif 'brushlabels' in label and brush.pycocotools_imported:
+                    elif ('brushlabels' in label or (label["type"] == "MagicWand" and category_id is not None)) and brush.pycocotools_imported:
                         if "rle" not in label:
                             logger.warn(f"Encountered a brushlabel without a RLE: {label}")
                             continue                            
