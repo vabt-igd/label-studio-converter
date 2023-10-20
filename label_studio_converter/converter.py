@@ -938,8 +938,7 @@ class Converter(object):
                         bbox = brush.get_cocomask_bounding_box(coco_rle)
                         annotations.append(
                             [
-                                [category_id]
-                                + bbox,
+                                str(category_id) + " " + str(bbox).replace("[", "").replace("]", "").replace(",", ""),
                             ]
                         )
                     else:
