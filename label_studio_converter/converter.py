@@ -736,7 +736,7 @@ class Converter(object):
                         }
                     )
                 else:
-                    raise ValueError("Unknown label type")
+                    logger.warn(f"Incompatible label type for COCO export: {label}")
 
                 if os.getenv('LABEL_STUDIO_FORCE_ANNOTATOR_EXPORT'):
                     annotations[-1].update({'annotator': get_annotator(item)})
