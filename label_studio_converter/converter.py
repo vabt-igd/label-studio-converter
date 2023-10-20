@@ -881,10 +881,8 @@ class Converter(object):
                         for category_name in label[key]:
                             category_names.append(category_name)
 
-                if len(category_names) == 0:
-                    logger.debug(
-                        "Unknown label type or labels are empty: " + str(label)
-                    )
+                if category_name is None:
+                    logger.warning(f"Unknown label type or labels are empty: {label}")
                     continue
 
                 for category_name in category_names:
