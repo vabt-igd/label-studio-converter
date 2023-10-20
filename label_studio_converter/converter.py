@@ -624,7 +624,7 @@ class Converter(object):
                         break
 
                 if category_name is None:
-                    logger.warning("Unknown label type or labels are empty")
+                    logger.warning(f"Unknown label type or labels are empty: {label}")
                     continue
 
                 if not height or not width:
