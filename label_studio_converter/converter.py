@@ -60,6 +60,7 @@ class Format(Enum):
     ASR_MANIFEST = 10
     YOLO = 11
     CSV_OLD = 12
+    JSON_TS_WITH_DATA = 13
 
     def __str__(self):
         return self.name
@@ -142,6 +143,12 @@ class Converter(object):
             'format expected by NVIDIA NeMo models.',
             'link': 'https://labelstud.io/guide/export.html#ASR-MANIFEST',
             'tags': ['speech recognition'],
+        },
+        Format.JSON_TS_WITH_DATA: {
+            'title': 'JSON for timeseries labeling with data',
+            'description': 'List of items in raw JSON format stored in one JSON file. Additionally includes the raw '
+            'data in the raw_data/ folder.',
+            'link': 'https://labelstud.io/guide/export.html#JSON',
         },
     }
 
@@ -261,6 +268,8 @@ class Converter(object):
                 upload_dir=self.upload_dir,
                 download_resources=self.download_resources,
             )
+        elif format == Format.JSON_TS_WITH_DATA:
+            self.convert_to_json_ts_with_data(input_data, output_data, is_dir=is_dir)
 
     def _get_data_keys_and_output_tags(self, output_tags=None):
         data_keys = set()
@@ -296,6 +305,7 @@ class Converter(object):
             output_tag_types.add(info['type'])
             for input_tag in info['inputs']:
                 input_tag_types.add(input_tag['type'])
+                print(input_tag['type'])
 
         all_formats = [f.name for f in Format]
         if not ('Text' in input_tag_types and 'Labels' in output_tag_types):
@@ -353,7 +363,9 @@ class Converter(object):
             and 'TextArea' in output_tag_types
         ):
             all_formats.remove(Format.ASR_MANIFEST.name)
-
+        if not ('TimeSeries' in input_tag_types):
+            all_formats.remove(Format.JSON_TS_WITH_DATA.name)
+            
         return all_formats
 
     @property
@@ -487,6 +499,81 @@ class Converter(object):
 
     def _check_format(self, fmt):
         pass
+
+    def convert_to_json_ts_with_data(self, input_data, output_dir, is_dir=True):
+        self._check_format(Format.JSON_TS_WITH_DATA)
+        
+        ensure_dir(output_dir)
+        output_file = os.path.join(output_dir, 'result.json')
+        records = []
+        item_iterator = self.iter_from_dir if is_dir else self.iter_from_json_file
+
+        for item in item_iterator(input_data):
+            record = deepcopy(item['input'])
+            if 'csv' in record:
+                _, file_name = os.path.split(os.path.abspath(record['csv']))
+                record['csv'] = os.path.join("raw_data", file_name)
+            if item.get('id') is not None:
+                record['id'] = item['id']
+                
+            for name, value in item['output'].items():
+                annotations = []
+                for label in value:
+                    fixed_annotation = {}
+                    fixed_annotation['label'] = label["timeserieslabels"][0]
+                    fixed_annotation['start_idx'] = label['start']
+                    fixed_annotation['end_idx'] = label['end']
+                    annotations.append(fixed_annotation)
+                record[name] = annotations
+                
+            # record['annotator'] = get_annotator(item, int_id=True)
+            # record['annotation_id'] = item['annotation_id']
+            # record['created_at'] = item['created_at']
+            # record['updated_at'] = item['updated_at']
+            # record['lead_time'] = item['lead_time']
+            # if 'agreement' in item:
+            #     record['agreement'] = item['agreement']
+            records.append(record)
+
+        with io.open(output_file, mode='w', encoding='utf8') as fout:
+            json.dump(records, fout, indent=2, ensure_ascii=False)
+        
+        output_raw_data_dir = os.path.join(output_dir, 'raw_data')
+        if output_raw_data_dir is not None:
+            ensure_dir(output_raw_data_dir)
+        else:
+            output_raw_data_dir = os.path.join(output_dir, 'raw_data')
+            os.makedirs(output_raw_data_dir, exist_ok=True)
+            
+        categories, category_name_to_id = self._get_labels()
+        data_key = self._data_keys[0]
+        item_iterator = (
+            self.iter_from_dir(input_data)
+            if is_dir
+            else self.iter_from_json_file(input_data)
+        )
+        
+        for item_idx, item in enumerate(item_iterator):
+            ts_path = item['input'][data_key]
+            
+            # download all time series data of the dataset, including the ones without annotations
+            if not os.path.exists(ts_path):
+                try:
+                    ts_path = download(
+                        ts_path,
+                        output_raw_data_dir,
+                        project_dir=self.project_dir,
+                        return_relative_path=True,
+                        upload_dir=self.upload_dir,
+                        download_resources=self.download_resources,
+                    )
+                except:
+                    logger.info(
+                        'Unable to download {ts_path}. The time series of {item} will be skipped'.format(
+                            ts_path=ts_path, item=item
+                        ),
+                        exc_info=True,
+                    )
 
     def convert_to_json(self, input_data, output_dir, is_dir=True):
         self._check_format(Format.JSON)
