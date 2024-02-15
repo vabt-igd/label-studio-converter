@@ -305,7 +305,6 @@ class Converter(object):
             output_tag_types.add(info['type'])
             for input_tag in info['inputs']:
                 input_tag_types.add(input_tag['type'])
-                print(input_tag['type'])
 
         all_formats = [f.name for f in Format]
         if not ('Text' in input_tag_types and 'Labels' in output_tag_types):
