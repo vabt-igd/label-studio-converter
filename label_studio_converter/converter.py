@@ -146,8 +146,8 @@ class Converter(object):
         },
         Format.JSON_TS_WITH_DATA: {
             'title': 'JSON for timeseries labeling with data',
-            'description': 'List of items in raw JSON format stored in one JSON file. Additionally includes the raw '
-            'data in the raw_data/ folder.',
+            'description': 'List of items in raw JSON format stored in one JSON file, similiar to JSON-MIN. '
+            'Additionally includes the raw data in the raw_data/ folder.',
             'link': 'https://labelstud.io/guide/export.html#JSON',
         },
     }
@@ -503,7 +503,7 @@ class Converter(object):
         self._check_format(Format.JSON_TS_WITH_DATA)
         
         ensure_dir(output_dir)
-        output_file = os.path.join(output_dir, 'result.json')
+        output_file = os.path.join(output_dir, 'labeled_results.json')
         records = []
         item_iterator = self.iter_from_dir if is_dir else self.iter_from_json_file
 
@@ -511,7 +511,8 @@ class Converter(object):
             record = deepcopy(item['input'])
             if 'csv' in record:
                 _, file_name = os.path.split(os.path.abspath(record['csv']))
-                record['csv'] = os.path.join("raw_data", file_name)
+                del record['csv']
+                record['csv_file'] = os.path.join('raw_data', file_name)
             if item.get('id') is not None:
                 record['id'] = item['id']
                 
@@ -520,10 +521,10 @@ class Converter(object):
                 for label in value:
                     fixed_annotation = {}
                     fixed_annotation['label'] = label["timeserieslabels"][0]
-                    fixed_annotation['start_idx'] = label['start']
-                    fixed_annotation['end_idx'] = label['end']
+                    fixed_annotation['start_time'] = label['start']
+                    fixed_annotation['end_time'] = label['end']
                     annotations.append(fixed_annotation)
-                record[name] = annotations
+                record['labels'] = annotations
                 
             # record['annotator'] = get_annotator(item, int_id=True)
             # record['annotation_id'] = item['annotation_id']
